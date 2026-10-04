@@ -10,7 +10,7 @@ const FRAMES = [
   { id: '1day', label: '日足', color: '#eacb75' }, { id: '1week', label: '週足', color: '#c39af6' },
   { id: '1month', label: '月足', color: '#fa9b9d' },
 ];
-const state = { period: 1, coin: COINS[0], frames: new Set(['1day']), market: new Map(), series: new Map(), offset: 0, zoom: 1, cross: null, zeroBase: false, view: 'market' };
+const state = { period: 1, coin: COINS[0], frameOrder: ['1day'], market: new Map(), series: new Map(), offset: 0, zoom: 1, priceZoom: 1, cross: null, zeroBase: false, view: 'market' };
 const yen = value => `¥${Number(value).toLocaleString('ja-JP', { maximumFractionDigits: value < 1 ? 4 : value < 100 ? 2 : 0 })}`;
 const percent = value => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 const dateLabel = time => new Date(time).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -104,11 +104,16 @@ async function loadMarket(force = false) {
 }
 
 function renderFrames() {
-  $('timeframes').innerHTML = FRAMES.map(frame => `<button type="button" data-frame="${frame.id}" class="${state.frames.has(frame.id) ? 'selected' : ''}" style="--frame-color:${frame.color}" aria-pressed="${state.frames.has(frame.id)}">${frame.label}</button>`).join('');
+  const primary = state.frameOrder.at(-1);
+  $('timeframes').innerHTML = FRAMES.map(frame => {
+    const selected = state.frameOrder.includes(frame.id);
+    const priority = frame.id === primary;
+    return `<button type="button" data-frame="${frame.id}" class="${selected ? 'selected' : ''} ${priority ? 'priority' : ''}" style="--frame-color:${frame.color}" aria-pressed="${selected}" aria-label="${frame.label}${priority ? '、最優先' : ''}">${frame.label}</button>`;
+  }).join('');
 }
 
 async function openCoin(coin) {
-  state.coin = coin; state.series.clear(); state.offset = 0; state.zoom = 1; state.cross = null;
+  state.coin = coin; state.series.clear(); state.offset = 0; state.zoom = 1; state.priceZoom = 1; state.cross = null;
   renderChartHeading();
   show('chart');
   loadChart();
@@ -120,7 +125,7 @@ async function loadChart() {
   const pair = state.coin.pair;
   $('chartError').hidden = true;
   drawChart();
-  await Promise.all([...state.frames].map(async frame => {
+  await Promise.all(state.frameOrder.map(async frame => {
     try {
       const data = await chartHistory(pair, frame);
       if (id !== chartRequest || pair !== state.coin.pair) return;
@@ -132,7 +137,7 @@ async function loadChart() {
     drawChart();
   }));
   if (id !== chartRequest) return;
-  if (![...state.frames].some(frame => state.series.get(frame)?.length)) {
+  if (!state.frameOrder.some(frame => state.series.get(frame)?.length)) {
     $('chartError').textContent = '選択した足データを取得できません。接続を確認して、別の足を選択してください。';
     $('chartError').hidden = false;
   }
@@ -150,7 +155,7 @@ function drawChart() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
   const left = 14, right = w - 68, top = 20, bottom = h - 36, plotH = bottom - top, plotW = right - left;
   const candleRight = right - 18;
-  const selected = FRAMES.filter(f => state.frames.has(f.id) && state.series.get(f.id)?.length);
+  const selected = state.frameOrder.slice().reverse().map(id => FRAMES.find(frame => frame.id === id)).filter(frame => state.series.get(frame.id)?.length);
   if (!selected.length) { ctx.fillStyle = '#829fa3'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('チャートを読み込み中…', w / 2, h / 2); return; }
   const windows = selected.map(frame => {
     const rows = state.series.get(frame.id);
@@ -165,6 +170,8 @@ function drawChart() {
   const padding = state.zeroBase ? hi * .06 : Math.max((hi - lo) * .15, live * .001);
   if (!state.zeroBase) lo = Math.max(0, lo - padding);
   hi += padding;
+  if (state.zeroBase) hi /= state.priceZoom;
+  else { lo = Math.max(0, live - (live - lo) / state.priceZoom); hi = live + (hi - live) / state.priceZoom; }
   const y = price => bottom - ((price - lo) / (hi - lo || 1)) * plotH;
   ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'left';
   for (let i = 0; i <= 4; i++) {
@@ -174,7 +181,7 @@ function drawChart() {
   }
   const zeroY = y(0);
   if (zeroY >= top && zeroY <= bottom) { ctx.setLineDash([3, 4]); ctx.strokeStyle = '#91a7aa'; ctx.beginPath(); ctx.moveTo(left, zeroY); ctx.lineTo(right, zeroY); ctx.stroke(); ctx.setLineDash([]); }
-  windows.forEach(({ frame, rows, count }, layer) => {
+  windows.slice().reverse().forEach(({ frame, rows, count }, layer) => {
     const step = (plotW - 18) / Math.max(count, 2), width = Math.max(2, Math.min(10, step * (windows.length > 1 ? .46 : .62)));
     const alpha = windows.length > 1 ? .73 : 1;
     rows.forEach((c, i) => {
@@ -201,26 +208,48 @@ function drawChart() {
     if (!state.offset) { ctx.fillStyle = '#eacb75'; ctx.beginPath(); ctx.arc(right, liveY, 3.5, 0, Math.PI * 2); ctx.fill(); }
   }
   const primary = windows[0].rows;
+  const primaryFrame = windows[0].frame;
   ctx.fillStyle = '#89a6aa'; ctx.font = '11px sans-serif';
-  if (primary.length) { ctx.fillText(shortDate(primary[0].time), left, h - 12); ctx.textAlign = 'right'; ctx.fillText(shortDate(primary.at(-1).time), right, h - 12); }
+  if (primary.length) {
+    const intraday = primaryFrame.id === '1min' || primaryFrame.id === '1hour';
+    const axisDate = c => intraday ? dateLabel(c.time) : shortDate(c.time);
+    ctx.fillText(axisDate(primary[0]), left, h - 12);
+    if (!intraday) { ctx.textAlign = 'center'; ctx.fillText(axisDate(primary[Math.floor((primary.length - 1) / 2)]), (left + candleRight) / 2, h - 12); }
+    ctx.textAlign = 'right'; ctx.fillText(axisDate(primary.at(-1)), right, h - 12);
+  }
   if (state.cross) {
     const x = Math.max(left, Math.min(right, state.cross.x)), cy = Math.max(top, Math.min(bottom, state.cross.y));
     ctx.strokeStyle = '#f4f6f3'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.moveTo(left, cy); ctx.lineTo(right, cy); ctx.stroke(); ctx.setLineDash([]);
     const price = lo + (bottom - cy) / plotH * (hi - lo);
     ctx.fillStyle = '#edf7f5'; ctx.fillRect(right + 2, cy - 10, 65, 20); ctx.fillStyle = '#10232d'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'left'; ctx.fillText(yen(price).slice(0, 11), right + 5, cy + 4);
     const index = Math.max(0, Math.min(primary.length - 1, Math.round(primary.length - 1 - (candleRight - x) / ((plotW - 18) / Math.max(windows[0].count, 2)))));
-    if (primary[index]) { const label = dateLabel(primary[index].time); ctx.fillStyle = '#edf7f5'; ctx.fillRect(Math.max(left, Math.min(right - 98, x - 49)), bottom + 3, 98, 21); ctx.fillStyle = '#10232d'; ctx.textAlign = 'center'; ctx.fillText(label, Math.max(left + 49, Math.min(right - 49, x)), bottom + 18); }
+    if (primary[index]) {
+      const candle = primary[index], label = dateLabel(candle.time);
+      ctx.fillStyle = '#edf7f5'; ctx.fillRect(Math.max(left, Math.min(right - 98, x - 49)), bottom + 3, 98, 21);
+      ctx.fillStyle = '#10232d'; ctx.textAlign = 'center'; ctx.fillText(label, Math.max(left + 49, Math.min(right - 49, x)), bottom + 18);
+      ctx.fillStyle = '#102e36'; ctx.fillRect(left + 7, top + 6, 178, 46);
+      ctx.fillStyle = primaryFrame.color; ctx.fillRect(left + 7, top + 6, 3, 46);
+      ctx.textAlign = 'left'; ctx.font = '11px sans-serif'; ctx.fillStyle = '#a9c7c7'; ctx.fillText(`${primaryFrame.label}  ${label}`, left + 17, top + 24);
+      ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#f2f8f7'; ctx.fillText(`終値  ${yen(candle.close)}`, left + 17, top + 43);
+    }
   }
 }
 
 const pointers = new Map(); let touchStart = null, holdTimer = null;
 function pos(event) { const r = canvas.getBoundingClientRect(); return { x: event.clientX - r.left, y: event.clientY - r.top }; }
 canvas.addEventListener('pointerdown', event => {
+  event.preventDefault();
   canvas.setPointerCapture(event.pointerId); const p = pos(event); pointers.set(event.pointerId, p);
-  if (pointers.size === 1) { touchStart = { ...p, offset: state.offset, moved: false }; holdTimer = setTimeout(() => { state.cross = p; drawChart(); }, 470); }
+  if (pointers.size === 1) {
+    const box = canvas.getBoundingClientRect();
+    const mode = p.y >= box.height - 36 ? 'xscale' : p.x >= box.width - 68 ? 'yscale' : 'pan';
+    touchStart = { ...p, offset: state.offset, zoom: state.zoom, priceZoom: state.priceZoom, mode, moved: false };
+    if (mode === 'pan') holdTimer = setTimeout(() => { state.cross = p; drawChart(); }, 470);
+  }
   else { clearTimeout(holdTimer); touchStart = null; }
 });
 canvas.addEventListener('pointermove', event => {
+  event.preventDefault();
   if (!pointers.has(event.pointerId)) return;
   const p = pos(event), old = pointers.get(event.pointerId); pointers.set(event.pointerId, p);
   if (pointers.size === 2) {
@@ -231,13 +260,16 @@ canvas.addEventListener('pointermove', event => {
   }
   if (state.cross) { state.cross = p; drawChart(); return; }
   if (touchStart) {
-    const dx = p.x - touchStart.x;
+    const dx = p.x - touchStart.x, dy = p.y - touchStart.y;
+    if (touchStart.mode === 'xscale') { state.zoom = Math.max(.55, Math.min(4, touchStart.zoom * Math.exp(dx / 110))); drawChart(); return; }
+    if (touchStart.mode === 'yscale') { state.priceZoom = Math.max(.4, Math.min(5, touchStart.priceZoom * Math.exp(-dy / 130))); drawChart(); return; }
     if (Math.abs(dx) > 7 || Math.abs(p.y - touchStart.y) > 7) { touchStart.moved = true; clearTimeout(holdTimer); }
     if (touchStart.moved) { state.offset = Math.max(0, Math.min(300, touchStart.offset + dx / 9)); drawChart(); }
   }
 });
 function release(event) { pointers.delete(event.pointerId); clearTimeout(holdTimer); if (!pointers.size) { touchStart = null; state.cross = null; drawChart(); } }
 canvas.addEventListener('pointerup', release); canvas.addEventListener('pointercancel', release);
+for (const type of ['contextmenu', 'selectstart', 'dragstart']) $('chartWrap').addEventListener(type, event => event.preventDefault());
 canvas.addEventListener('wheel', event => { event.preventDefault(); state.zoom = Math.max(.55, Math.min(4, state.zoom * (event.deltaY < 0 ? 1.12 : .89))); drawChart(); }, { passive: false });
 new ResizeObserver(drawChart).observe($('chartWrap'));
 
@@ -249,8 +281,10 @@ $('coinList').addEventListener('click', event => { const row = event.target.clos
 $('timeframes').addEventListener('click', event => {
   const button = event.target.closest('[data-frame]'); if (!button) return;
   const frame = button.dataset.frame;
-  if (state.frames.has(frame) && state.frames.size > 1) state.frames.delete(frame);
-  else state.frames.add(frame);
+  const index = state.frameOrder.indexOf(frame);
+  if (index < 0) state.frameOrder.push(frame);
+  else if (index === state.frameOrder.length - 1 && state.frameOrder.length > 1) state.frameOrder.pop();
+  else if (index >= 0) { state.frameOrder.splice(index, 1); state.frameOrder.push(frame); }
   renderFrames(); loadChart();
 });
 $('marketTab').addEventListener('click', () => show('market'));

@@ -2,3 +2,5 @@
 .chart-legend button{margin-left:auto;border:1px solid #35515a;background:#152e38;color:#aec9c9;border-radius:7px;padding:5px 7px;font-size:11px}.chart-legend button[aria-pressed="true"]{color:#50e0b7;border-color:#50e0b7}
 .timeframes button.selected{border-color:var(--frame-color);color:var(--frame-color)}
 .segmented button,.timeframes button{font-size:14px}.timeframes button{min-height:44px}.chart-legend button{min-height:36px;font-size:13px}.back-button{width:42px;height:44px}.icon-button{min-width:44px;min-height:44px}
+.timeframes button.priority{outline:2px solid var(--frame-color);outline-offset:2px;box-shadow:inset 0 0 0 1px var(--frame-color)}
+.chart-wrap,.chart-wrap canvas{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
