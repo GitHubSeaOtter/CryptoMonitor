@@ -32,7 +32,7 @@
           <div id="timeframes" class="timeframes" role="group" aria-label="チャートの足種"></div>
           <div class="chart-panel">
             <div class="chart-legend"><span><i class="legend-up"></i> 上昇</span><span><i class="legend-down"></i> 下落</span><span class="legend-live"><i></i> 現在価格</span><button id="zeroButton" type="button" aria-pressed="false">0基準</button></div>
-            <div id="chartWrap" class="chart-wrap"><canvas id="chartCanvas" aria-label="ローソク足チャート。ドラッグで移動、ピンチで拡大縮小、長押しで十字線を表示" role="img"></canvas></div>
+            <div id="chartWrap" class="chart-wrap"><canvas id="chartCanvas" aria-label="ローソク足チャート。ドラッグで移動、ピンチで拡大縮小、長押しで十字線を表示" role="img"></canvas><div id="emptyChart" class="chart-empty" role="status" hidden>表示する足を選択してください</div></div>
             <div class="chart-hint">ドラッグで移動 · ピンチで拡大 · 長押しで価格と時刻を確認<br>横軸を左右に、縦軸を上下にスワイプして拡縮</div>
           </div>
           <p id="chartError" class="error-message" hidden></p>

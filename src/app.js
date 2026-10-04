@@ -18,13 +18,14 @@ const shortDate = time => new Date(time).toLocaleDateString('ja-JP', { month: 'n
 
 function show(view) {
   state.view = view;
+  document.body.classList.toggle('chart-mode', view === 'chart');
   $('marketView').hidden = view !== 'market';
   $('chartView').hidden = view !== 'chart';
   $('marketTab').classList.toggle('active', view === 'market');
   $('chartTab').classList.toggle('active', view === 'chart');
   $('marketTab').toggleAttribute('aria-current', view === 'market');
   $('chartTab').toggleAttribute('aria-current', view === 'chart');
-  if (view === 'chart') requestAnimationFrame(drawChart);
+  if (view === 'chart') { window.scrollTo(0, 0); requestAnimationFrame(drawChart); }
 }
 
 function lineSvg(points, positive) {
@@ -110,6 +111,7 @@ function renderFrames() {
     const priority = frame.id === primary;
     return `<button type="button" data-frame="${frame.id}" class="${selected ? 'selected' : ''} ${priority ? 'priority' : ''}" style="--frame-color:${frame.color}" aria-pressed="${selected}" aria-label="${frame.label}${priority ? '、最優先' : ''}">${frame.label}</button>`;
   }).join('');
+  $('emptyChart').hidden = state.frameOrder.length > 0;
 }
 
 async function openCoin(coin) {
@@ -125,6 +127,7 @@ async function loadChart() {
   const pair = state.coin.pair;
   $('chartError').hidden = true;
   drawChart();
+  if (!state.frameOrder.length) return;
   await Promise.all(state.frameOrder.map(async frame => {
     try {
       const data = await chartHistory(pair, frame);
@@ -156,7 +159,10 @@ function drawChart() {
   const left = 14, right = w - 68, top = 20, bottom = h - 36, plotH = bottom - top, plotW = right - left;
   const candleRight = right - 18;
   const selected = state.frameOrder.slice().reverse().map(id => FRAMES.find(frame => frame.id === id)).filter(frame => state.series.get(frame.id)?.length);
-  if (!selected.length) { ctx.fillStyle = '#829fa3'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('チャートを読み込み中…', w / 2, h / 2); return; }
+  if (!selected.length) {
+    if (state.frameOrder.length) { ctx.fillStyle = '#829fa3'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('チャートを読み込み中…', w / 2, h / 2); }
+    return;
+  }
   const windows = selected.map(frame => {
     const rows = state.series.get(frame.id);
     const count = Math.max(12, Math.round(Math.min(rows.length, 46) / state.zoom));
@@ -283,8 +289,7 @@ $('timeframes').addEventListener('click', event => {
   const frame = button.dataset.frame;
   const index = state.frameOrder.indexOf(frame);
   if (index < 0) state.frameOrder.push(frame);
-  else if (index === state.frameOrder.length - 1 && state.frameOrder.length > 1) state.frameOrder.pop();
-  else if (index >= 0) { state.frameOrder.splice(index, 1); state.frameOrder.push(frame); }
+  else state.frameOrder.splice(index, 1);
   renderFrames(); loadChart();
 });
 $('marketTab').addEventListener('click', () => show('market'));
