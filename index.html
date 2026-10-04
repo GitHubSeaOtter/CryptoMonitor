@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#09131b" />
+    <meta name="description" content="Bitbank の暗号資産価格とローソク足を確認するモバイル向けアプリ" />
+    <title>Crypto Monitor</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">◈</span><span>CRYPTO<br><strong>MONITOR</strong></span></div>
+        <div class="header-right"><span id="connection" class="connection">接続中</span><button id="settingsButton" class="icon-button" aria-label="設定を開く">⚙</button></div>
+      </header>
+
+      <main>
+        <section id="marketView" class="view" aria-label="銘柄一覧">
+          <div class="section-heading"><div><div class="eyebrow">BITBANK MARKET</div><h1>マーケット</h1></div><button id="refreshButton" class="refresh-button" aria-label="相場を更新">↻</button></div>
+          <div class="market-summary"><span>対象銘柄 <strong>6</strong></span><span id="updatedAt">更新待ち</span></div>
+          <div class="period-scroll"><div id="listPeriods" class="segmented" role="group" aria-label="一覧の期間"></div></div>
+          <div class="sort-label"><span>銘柄 / 推移</span><span>価格 / 変動率 <span id="sortArrow">↓</span></span></div>
+          <div id="coinList" class="coin-list" aria-live="polite"></div>
+          <p id="marketError" class="error-message" hidden></p>
+        </section>
+
+        <section id="chartView" class="view" aria-label="チャート" hidden>
+          <div class="chart-heading"><button id="backButton" class="back-button" aria-label="銘柄一覧へ戻る">‹</button><div><div class="eyebrow">BITBANK CHART</div><h1 id="chartTitle">BTC / JPY</h1></div><div class="chart-price"><strong id="chartCurrent">—</strong><span id="chartChange">—</span></div></div>
+          <div class="panel-title"><span>表示する足</span><span>複数選択可</span></div>
+          <div id="timeframes" class="timeframes" role="group" aria-label="チャートの足種"></div>
+          <div class="chart-panel">
+            <div class="chart-legend"><span><i class="legend-up"></i> 上昇</span><span><i class="legend-down"></i> 下落</span><span class="legend-live"><i></i> 現在価格</span><button id="zeroButton" type="button" aria-pressed="false">0基準</button></div>
+            <div id="chartWrap" class="chart-wrap"><canvas id="chartCanvas" aria-label="ローソク足チャート。ドラッグで移動、ピンチで拡大縮小、長押しで十字線を表示" role="img"></canvas></div>
+            <div class="chart-hint">ドラッグで移動 · ピンチで拡大 · 長押しで価格と時刻を確認</div>
+          </div>
+          <p id="chartError" class="error-message" hidden></p>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="画面切替"><button id="marketTab" class="nav-item active" aria-current="page"><span class="nav-icon">▦</span><span>マーケット</span></button><button id="chartTab" class="nav-item"><span class="nav-icon">▥</span><span>チャート</span></button></nav>
+    </div>
+
+    <dialog id="settingsDialog" class="settings-dialog"><form method="dialog"><div class="dialog-head"><h2>設定</h2><button class="icon-button" value="cancel" aria-label="閉じる">×</button></div><p>APIキーはこのブラウザ内だけに保存します。価格表示にはBitbankの公開APIを使用するため、キーの入力は不要です。</p><label for="apiKey">Bitbank APIキー</label><input id="apiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="APIキーを入力" /><div class="dialog-actions"><button id="deleteKey" type="button" class="text-button">削除</button><button id="saveKey" type="button" class="primary-button">この端末に保存</button></div><p id="keyStatus" class="key-status" aria-live="polite"></p></form></dialog>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
